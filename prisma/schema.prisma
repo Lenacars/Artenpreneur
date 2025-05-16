@@ -1,0 +1,79 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "postgresql" // veya kullandığınız veritabanı türü (mysql, sqlite, vs.)
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// --- Buradan sonrası sizin modelleriniz ---
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  subscriptions Subscription[]
+  videoProgress VideoProgress[]
+}
+
+model Course {
+  id            String          @id @default(cuid())
+  title         String
+  description   String
+  price         Float
+  videos        Video[]
+  subscriptions Subscription[]  // <-- Bunu ekleyin!
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model Video {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  url         String    // Video URL (AWS S3 veya başka bir CDN)
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id])
+  progress    VideoProgress[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id])
+  startDate DateTime @default(now())
+  endDate   DateTime
+  status    SubscriptionStatus @default(ACTIVE)
+}
+
+model VideoProgress {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  videoId   String
+  video     Video    @relation(fields: [videoId], references: [id])
+  progress  Float    @default(0) // 0-100 arası izleme yüzdesi
+  completed Boolean  @default(false)
+  lastPosition Float @default(0) // Video izleme pozisyonu (saniye)
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}

@@ -1,0 +1,87 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #b2e4e6;
+  --primary-dark: #8fd7da;
+  --primary-light: #d5f1f2;
+  --secondary: #6a3d99;
+  --secondary-light: #9a6cc8;
+  --accent: #bdb9eb;
+  --accent-light: #d1cef2;
+  --accent-dark: #a29fe0;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --background: #ffffff;
+  --background-secondary: #f8f9fa;
+
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --muted: 210 40% 96.1%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 183 70% 80%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 183 70% 80%;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-text-primary;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-playfair font-bold;
+  }
+}
+
+@layer components {
+  .container-custom {
+    @apply container mx-auto px-4 md:px-6 lg:px-8;
+  }
+
+  .btn-primary {
+    @apply bg-primary hover:bg-primary-dark text-primary-foreground font-medium py-2 px-4 rounded transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary hover:bg-secondary-light text-white font-medium py-2 px-4 rounded transition-colors;
+  }
+
+  .btn-outline {
+    @apply border border-primary hover:bg-primary-light text-primary-foreground font-medium py-2 px-4 rounded transition-colors;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-md overflow-hidden;
+  }
+
+  .section-title {
+    @apply text-3xl md:text-4xl font-bold mb-6 text-text-primary;
+  }
+
+  .section-subtitle {
+    @apply text-xl md:text-2xl font-semibold mb-4 text-text-primary;
+  }
+}
+
+.font-playfair {
+  font-family: var(--font-playfair);
+}
+
+.font-sans {
+  font-family: var(--font-inter);
+}
