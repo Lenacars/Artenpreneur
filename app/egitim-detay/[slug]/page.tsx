@@ -1,23 +1,60 @@
+"use client"
+import type React from "react"
+import { useState } from "react"
 import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { CheckCircle, Clock, Award, Users, Play, Share2, Gift } from "lucide-react"
+import { CheckCircle, Clock, Award, Users, Play, Share2, Gift, Copy, Check, Tag } from "lucide-react"
 import { getInstructorImage } from "@/lib/getInstructorImage"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
+import { useParams, useRouter } from "next/navigation"
+import { addToCart } from "@/lib/cart"
+import { toast } from "sonner"
+import { validateCoupon, calculateDiscount, parsePrice, formatPrice, type Coupon } from "@/lib/coupons"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose,
+} from "@/components/ui/dialog"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
-interface Props {
-  params: {
-    slug: string
-  }
-}
+export default function CourseDetailPage() {
+  const router = useRouter()
+  const params = useParams()
+  const slug = params.slug as string
 
-export default async function CourseDetailPage({ params }: Props) {
+  // Kupon kodu state'leri
+  const [couponCode, setCouponCode] = useState("")
+  const [appliedCoupon, setAppliedCoupon] = useState<Coupon | null>(null)
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
+
+  // Paylaşım state'leri
+  const [copied, setCopied] = useState(false)
+
+  // Hediye formu state'leri
+  const [giftForm, setGiftForm] = useState({
+    recipientName: "",
+    recipientEmail: "",
+    senderName: "",
+    message: "",
+  })
+  const [giftSending, setGiftSending] = useState(false)
+  const [giftError, setGiftError] = useState("")
+  const [giftSuccess, setGiftSuccess] = useState(false)
+
   // Gerçek uygulamada, bu veriyi veritabanından çekeceksiniz
   // Şimdilik örnek veri kullanıyoruz
   const course = {
-    id: params.slug,
+    id: slug,
     title: "Sanatçılar İçin Yazılı İletişim",
     instructor: "Sanat Deliorman",
     price: "₺90,00",
@@ -103,6 +140,178 @@ export default async function CourseDetailPage({ params }: Props) {
       price: "₺90,00",
     },
   ]
+
+  // Fiyat hesaplamaları
+  const originalPrice = parsePrice(course.price)
+  const discountAmount = appliedCoupon ? calculateDiscount(originalPrice, appliedCoupon.discountPercentage) : 0
+  const finalPrice = originalPrice - discountAmount
+
+  // Kupon kodu uygulama
+  const handleApplyCoupon = () => {
+    if (!couponCode.trim()) {
+      toast.error("Lütfen bir kupon kodu girin")
+      return
+    }
+
+    setIsApplyingCoupon(true)
+
+    // Gerçek uygulamada bu bir API çağrısı olabilir
+    setTimeout(() => {
+      const coupon = validateCoupon(couponCode)
+
+      if (coupon) {
+        setAppliedCoupon(coupon)
+        toast.success("Kupon kodu uygulandı", {
+          description: `%${coupon.discountPercentage} indirim kazandınız!`,
+        })
+        setCouponCode("") // Kupon kodu alanını temizle
+      } else {
+        toast.error("Geçersiz kupon kodu", {
+          description: "Girdiğiniz kupon kodu geçerli değil veya süresi dolmuş.",
+        })
+      }
+
+      setIsApplyingCoupon(false)
+    }, 500) // Simüle edilmiş gecikme
+  }
+
+  // Kupon kodunu kaldırma
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null)
+    toast.info("Kupon kodu kaldırıldı")
+  }
+
+  const handleAddToCart = () => {
+    // Sepete eklerken indirimli fiyatı ve kupon bilgisini de ekle
+    addToCart({
+      id: course.id,
+      title: course.title,
+      price: formatPrice(finalPrice),
+      instructor: course.instructor,
+      quantity: 1,
+      couponCode: appliedCoupon?.code,
+      originalPrice: course.price,
+    })
+
+    // Sepete eklendi bildirimi göster
+    toast.success("Kurs sepete eklendi", {
+      description: `"${course.title}" kursu sepetinize eklendi.`,
+      duration: 3000,
+    })
+  }
+
+  const handleBuyNow = () => {
+    // Önce sepete ekle
+    addToCart({
+      id: course.id,
+      title: course.title,
+      price: formatPrice(finalPrice),
+      instructor: course.instructor,
+      quantity: 1,
+      couponCode: appliedCoupon?.code,
+      originalPrice: course.price,
+    })
+
+    // Kupon bilgisini localStorage'a kaydet
+    if (appliedCoupon) {
+      localStorage.setItem("appliedCoupon", JSON.stringify(appliedCoupon))
+    }
+
+    // Sonra ödeme sayfasına yönlendir
+    router.push(`/odeme/checkout`)
+  }
+
+  // Paylaşım URL'sini kopyalama
+  const handleCopyShareLink = () => {
+    // Tam URL'yi al
+    const shareUrl = `${window.location.origin}/egitim-detay/${slug}`
+
+    // URL'yi panoya kopyala
+    navigator.clipboard
+      .writeText(shareUrl)
+      .then(() => {
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000) // 2 saniye sonra reset
+      })
+      .catch((err) => {
+        console.error("URL kopyalanamadı:", err)
+        toast.error("URL kopyalanırken bir hata oluştu")
+      })
+  }
+
+  // Sosyal medyada paylaşım
+  const handleShareOnSocial = (platform: string) => {
+    const shareUrl = `${window.location.origin}/egitim-detay/${slug}`
+    const shareText = `${course.title} - Artenpreneur'de bu kursa göz atın!`
+
+    let shareLink = ""
+
+    switch (platform) {
+      case "twitter":
+        shareLink = `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(shareUrl)}`
+        break
+      case "facebook":
+        shareLink = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(shareUrl)}`
+        break
+      case "linkedin":
+        shareLink = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(shareUrl)}`
+        break
+      case "whatsapp":
+        shareLink = `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText + " " + shareUrl)}`
+        break
+    }
+
+    // Yeni pencerede paylaşım sayfasını aç
+    if (shareLink) {
+      window.open(shareLink, "_blank", "width=600,height=400")
+    }
+  }
+
+  // Hediye gönderme formu değişikliklerini izleme
+  const handleGiftFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setGiftForm((prev) => ({ ...prev, [name]: value }))
+  }
+
+  // Hediye gönderme işlemi
+  const handleSendGift = (e: React.FormEvent) => {
+    e.preventDefault()
+    setGiftSending(true)
+    setGiftError("")
+
+    // Form validasyonu
+    if (!giftForm.recipientEmail || !giftForm.recipientName || !giftForm.senderName) {
+      setGiftError("Lütfen gerekli alanları doldurun")
+      setGiftSending(false)
+      return
+    }
+
+    // Gerçek uygulamada bu bir API çağrısı olacak
+    setTimeout(() => {
+      // Başarılı hediye gönderimi simülasyonu
+      setGiftSuccess(true)
+      setGiftSending(false)
+
+      // Gerçek uygulamada burada API çağrısı yapılacak
+      console.log("Hediye bilgileri:", {
+        course: course.title,
+        courseId: course.id,
+        price: formatPrice(finalPrice),
+        ...giftForm,
+      })
+
+      // 3 saniye sonra formu sıfırla
+      setTimeout(() => {
+        setGiftForm({
+          recipientName: "",
+          recipientEmail: "",
+          senderName: "",
+          message: "",
+        })
+        setGiftSuccess(false)
+      }, 3000)
+    }, 1500)
+  }
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -371,42 +580,302 @@ export default async function CourseDetailPage({ params }: Props) {
                 <div className="border-t border-gray-300 flex-grow"></div>
               </div>
 
-              <div className="text-3xl font-bold mb-4 text-center">{course.price}</div>
+              {/* Fiyat Bilgisi */}
+              <div className="mb-4">
+                {appliedCoupon ? (
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Orijinal fiyat:</span>
+                      <span className="text-gray-600 line-through">{course.price}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <div className="flex items-center text-green-600">
+                        <Tag className="w-4 h-4 mr-1" />
+                        <span>%{appliedCoupon.discountPercentage} indirim:</span>
+                      </div>
+                      <span className="text-green-600">-{formatPrice(discountAmount)}</span>
+                    </div>
+                    <div className="flex justify-between items-center font-bold text-xl mt-1">
+                      <span>Toplam:</span>
+                      <span>{formatPrice(finalPrice)}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-3xl font-bold text-center">{course.price}</div>
+                )}
+              </div>
 
-              <Button variant="outline" className="w-full mb-2 border-gray-300 hover:bg-gray-50">
-                Sepete git
+              {/* Sepete Ekle butonu */}
+              <Button
+                variant="outline"
+                className="w-full mb-2 border-gray-300 hover:bg-gray-50"
+                onClick={handleAddToCart}
+              >
+                Sepete Ekle
               </Button>
 
-              <Link href={`/odeme/${course.id}`}>
-                <Button className="w-full mb-4 bg-purple-600 hover:bg-purple-700 text-white">Hemen kaydolun</Button>
-              </Link>
+              {/* Eğitime Katıl butonu */}
+              <Button className="w-full mb-4 bg-purple-600 hover:bg-purple-700 text-white" onClick={handleBuyNow}>
+                Eğitime Katıl
+              </Button>
 
               <p className="text-center text-sm text-gray-500 mb-2">30 gün içinde para iade garantisi</p>
               <p className="text-center text-sm text-gray-500 mb-4">Ömür Boyu Tam Erişim</p>
 
               <div className="flex justify-between items-center text-sm mb-4">
-                <Link href="#" className="text-gray-600 hover:text-gray-900 flex items-center">
-                  <Share2 className="w-4 h-4 mr-1" />
-                  Paylaş
-                </Link>
-                <Link href="#" className="text-gray-600 hover:text-gray-900 flex items-center">
-                  <Gift className="w-4 h-4 mr-1" />
-                  Bu kursu hediye et
-                </Link>
+                {/* Paylaş butonu - Popover ile */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-600 hover:text-gray-900 flex items-center p-0"
+                    >
+                      <Share2 className="w-4 h-4 mr-1" />
+                      Paylaş
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72">
+                    <div className="space-y-4">
+                      <h4 className="font-medium">Bu kursu paylaş</h4>
+
+                      <div className="flex justify-between">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-1"
+                          onClick={() => handleShareOnSocial("twitter")}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-blue-400"
+                          >
+                            <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"></path>
+                          </svg>
+                          Twitter
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-1"
+                          onClick={() => handleShareOnSocial("facebook")}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-blue-600"
+                          >
+                            <path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path>
+                          </svg>
+                          Facebook
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex items-center gap-1"
+                          onClick={() => handleShareOnSocial("whatsapp")}
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-green-500"
+                          >
+                            <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                          </svg>
+                          WhatsApp
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={`${typeof window !== "undefined" ? window.location.origin : ""}/egitim-detay/${slug}`}
+                          readOnly
+                          className="text-sm"
+                        />
+                        <Button variant="outline" size="icon" className="flex-shrink-0" onClick={handleCopyShareLink}>
+                          {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+
+                {/* Hediye Et butonu - Dialog ile */}
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-gray-600 hover:text-gray-900 flex items-center p-0"
+                    >
+                      <Gift className="w-4 h-4 mr-1" />
+                      Bu kursu hediye et
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>Kursu Hediye Et</DialogTitle>
+                      <DialogDescription>Sevdiklerinize "{course.title}" kursunu hediye edin.</DialogDescription>
+                    </DialogHeader>
+
+                    {giftSuccess ? (
+                      <div className="py-6 text-center space-y-4">
+                        <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                          <Check className="h-6 w-6 text-green-600" />
+                        </div>
+                        <h3 className="font-medium text-lg">Hediye gönderildi!</h3>
+                        <p className="text-gray-500">
+                          {giftForm.recipientName} kişisine hediye kurs bilgileri e-posta ile gönderildi.
+                        </p>
+                        <DialogClose asChild>
+                          <Button className="mt-2">Tamam</Button>
+                        </DialogClose>
+                      </div>
+                    ) : (
+                      <form onSubmit={handleSendGift}>
+                        <div className="grid gap-4 py-4">
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="recipientName" className="text-right">
+                              Alıcı Adı
+                            </Label>
+                            <Input
+                              id="recipientName"
+                              name="recipientName"
+                              value={giftForm.recipientName}
+                              onChange={handleGiftFormChange}
+                              className="col-span-3"
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="recipientEmail" className="text-right">
+                              Alıcı E-posta
+                            </Label>
+                            <Input
+                              id="recipientEmail"
+                              name="recipientEmail"
+                              type="email"
+                              value={giftForm.recipientEmail}
+                              onChange={handleGiftFormChange}
+                              className="col-span-3"
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="senderName" className="text-right">
+                              Gönderen Adı
+                            </Label>
+                            <Input
+                              id="senderName"
+                              name="senderName"
+                              value={giftForm.senderName}
+                              onChange={handleGiftFormChange}
+                              className="col-span-3"
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="message" className="text-right">
+                              Mesaj
+                            </Label>
+                            <Textarea
+                              id="message"
+                              name="message"
+                              value={giftForm.message}
+                              onChange={handleGiftFormChange}
+                              placeholder="Hediyeniz için özel bir mesaj yazın (isteğe bağlı)"
+                              className="col-span-3"
+                              rows={3}
+                            />
+                          </div>
+
+                          {giftError && <div className="bg-red-50 text-red-600 p-2 rounded text-sm">{giftError}</div>}
+
+                          <div className="bg-gray-50 p-3 rounded">
+                            <div className="flex justify-between items-center">
+                              <span>Kurs fiyatı:</span>
+                              <span className="font-medium">{formatPrice(finalPrice)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button type="submit" disabled={giftSending}>
+                            {giftSending ? "Gönderiliyor..." : "Hediye Gönder"}
+                          </Button>
+                        </DialogFooter>
+                      </form>
+                    )}
+                  </DialogContent>
+                </Dialog>
+
                 <Link href="#" className="text-gray-600 hover:text-gray-900">
                   Kupon Uygula
                 </Link>
               </div>
 
-              <div className="border border-gray-200 rounded p-3 mb-2">
-                <div className="text-xs text-gray-500 mb-1">LETSLEARNNOW kupon kodu uygulandı</div>
-                <div className="text-xs text-gray-500">Udemy kuponu</div>
-              </div>
-
-              <div className="flex">
-                <Input placeholder="Kupon Girin" className="rounded-r-none" />
-                <Button className="rounded-l-none bg-purple-600 hover:bg-purple-700 text-white">Uygula</Button>
-              </div>
+              {/* Kupon Kodu Bölümü */}
+              {appliedCoupon ? (
+                <div className="border border-gray-200 rounded p-3 mb-2">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">{appliedCoupon.code} kupon kodu uygulandı</div>
+                      <div className="text-xs text-gray-500">{appliedCoupon.description}</div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={handleRemoveCoupon}
+                    >
+                      Kaldır
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex">
+                  <Input
+                    placeholder="Kupon Girin"
+                    className="rounded-r-none"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleApplyCoupon()
+                      }
+                    }}
+                  />
+                  <Button
+                    className="rounded-l-none bg-purple-600 hover:bg-purple-700 text-white"
+                    onClick={handleApplyCoupon}
+                    disabled={isApplyingCoupon}
+                  >
+                    {isApplyingCoupon ? "Uygulanıyor..." : "Uygula"}
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </div>
