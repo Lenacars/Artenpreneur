@@ -1,176 +1,121 @@
-import { formatPrice } from "./coupons"
+// lib/invoice-generator.ts
+// Bu dosya, jsPDF kullanarak fatura PDF'i oluşturma mantığını içerir.
+// Eğer jsPDF ve jsPDF-AutoTable yüklü değilse, yüklemeniz gerekebilir:
+// pnpm add jspdf jspdf-autotable
 
-export type OrderDetails = {
-  paymentMethod?: string
-  orderTotal?: number
-  orderDate?: string
-  orderNumber?: string
-  courses?: Array<{
-    id: string
-    title: string
-    instructor: string
-    price: string
-    originalPrice?: string
-    image?: string
-  }>
+import { jsPDF } from "jspdf";
+import "jspdf-autotable"; // jspdf-autotable'ı import ettiğinizden emin olun
+
+// Fatura oluşturmak için beklenen veri tipi
+export interface OrderDetails {
+  orderNumber: string;
+  orderDate: string;
+  orderTotal: number;
+  paymentMethod: string;
+  courses: Array<{
+    id: string;
+    title: string;
+    instructor: string;
+    price: number; // <-- String yerine NUMBER olarak düzeltildi
+    originalPrice?: number; // <-- String yerine NUMBER olarak düzeltildi
+    image?: string; // Görsel yolu opsiyonel olabilir
+  }>;
   customerInfo?: {
-    name?: string
-    email?: string
-    address?: string
-    city?: string
-    country?: string
-    postalCode?: string
-  }
+    name?: string;
+    email?: string;
+    address?: string;
+    city?: string;
+    country?: string;
+    postalCode?: string;
+  };
 }
 
-// Tip tanımları için
-declare module "jspdf" {
-  interface jsPDF {
-    autoTable: any
-    lastAutoTable: any
-    output(type: string, options?: any): any
-  }
-}
+// Fiyatları formatlama (örneğin 1234.56 -> "₺1.234,56")
+const formatCurrency = (amount: number): string => {
+  return `₺${amount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 
-// QR kod için yardımcı fonksiyon
-async function generateQRCodeDataURL(data: string): Promise<string> {
-  try {
-    // QRCode.js'i dinamik olarak import et
-    const QRCode = await import("qrcode").then((m) => m.default || m)
+// Tarih formatlama (örneğin 2024-07-04T10:00:00Z -> "4 Temmuz 2024")
+const formatDate = (isoString: string): string => {
+  const date = new Date(isoString);
+  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
-    // QR kodu oluştur ve data URL olarak döndür
-    return await QRCode.toDataURL(data, {
-      errorCorrectionLevel: "M",
-      margin: 1,
-      width: 150,
-      color: {
-        dark: "#000000",
-        light: "#ffffff",
-      },
-    })
-  } catch (error) {
-    console.error("QR kod oluşturma hatası:", error)
-    throw error
-  }
-}
+// Fatura PDF'i oluşturan ana fonksiyon
+export const generateInvoicePDF = async (orderDetails: OrderDetails) => {
+  const doc = new jsPDF();
 
-export async function generateInvoicePDF(orderDetails: OrderDetails) {
-  try {
-    // Dinamik olarak jsPDF ve jspdf-autotable'ı import et
-    const jsPDFModule = await import("jspdf").then((m) => m.default || m)
-    const jsPDF = jsPDFModule as any
+  // Font ekleme (Türkçe karakterler için önemlidir)
+  // Eğer özel bir font kullanmıyorsanız, varsayılan fontta Türkçe karakter sorunu yaşanabilir.
+  // Varsayılan fontlar için jspdf ayarları veya font ekleme gerekli olabilir.
+  // Örneğin: doc.addFont("font-ismi.ttf", "FontAdı", "normal");
+  // doc.setFont("FontAdı");
 
-    // jspdf-autotable'ı import et
-    const autoTableModule = await import("jspdf-autotable").then((m) => m.default || m)
+  // Header
+  doc.setFontSize(22);
+  doc.text("Fatura", 105, 20, { align: 'center' }); // Sayfanın ortasında başlık
 
-    // PDF oluştur
-    const doc = new jsPDF()
+  doc.setFontSize(10);
+  doc.text("ARTENPRENEUR", 10, 10);
+  doc.text("Fatura Tarihi: " + formatDate(new Date().toISOString()), 10, 15);
 
-    // autoTable fonksiyonunu doc nesnesine ekle
-    if (typeof autoTableModule === "function") {
-      autoTableModule(doc)
-    }
+  doc.setFontSize(12);
+  doc.text(`Sipariş No: ${orderDetails.orderNumber}`, 10, 30);
+  doc.text(`Sipariş Tarihi: ${formatDate(orderDetails.orderDate)}`, 10, 37);
 
-    // Logo ve başlık
-    doc.setFontSize(20)
-    doc.setTextColor(128, 0, 128) // Mor renk
-    doc.text("ARTENPRENEUR", 105, 20, { align: "center" })
+  // Müşteri Bilgileri
+  doc.setFontSize(10);
+  doc.text("Müşteri Bilgileri:", 10, 50);
+  doc.text(`Adı: ${orderDetails.customerInfo?.name || 'Belirtilmemiş'}`, 10, 55);
+  doc.text(`E-posta: ${orderDetails.customerInfo?.email || 'Belirtilmemiş'}`, 10, 60);
+  // Adres vb. bilgiler de eklenebilir
 
-    doc.setFontSize(14)
-    doc.setTextColor(0, 0, 0)
-    doc.text("FATURA", 105, 30, { align: "center" })
+  // Kurslar Tablosu
+  const tableColumn = ["Ürün", "Eğitmen", "Birim Fiyat", "Adet", "Toplam"];
+  const tableRows: (string | number)[][] = [];
 
-    // Fatura bilgileri
-    doc.setFontSize(10)
-    doc.text(`Fatura No: ${orderDetails.orderNumber || "N/A"}`, 20, 45)
-    doc.text(`Tarih: ${orderDetails.orderDate || new Date().toLocaleDateString("tr-TR")}`, 20, 52)
-    doc.text(`Ödeme Yöntemi: ${orderDetails.paymentMethod || "Kredi Kartı"}`, 20, 59)
+  orderDetails.courses.forEach(course => {
+    tableRows.push([
+      course.title,
+      course.instructor,
+      formatCurrency(course.price),
+      1, // Kurslar genellikle 1 adet alınır
+      formatCurrency(course.price),
+    ]);
+  });
 
-    // Müşteri bilgileri
-    doc.setFontSize(12)
-    doc.text("Müşteri Bilgileri:", 140, 45)
-    doc.setFontSize(10)
+  (doc as any).autoTable({
+    startY: 70, // Tablonun başlangıç pozisyonu
+    head: [tableColumn],
+    body: tableRows,
+    theme: 'striped',
+    headStyles: { fillColor: [68, 100, 246] }, // Mavi renk tonu
+    styles: { font: "Helvetica", textColor: [50, 50, 50] }, // Yazı tipi ve rengi
+    columnStyles: {
+      0: { cellWidth: 70 }, // Ürün başlığı geniş
+      1: { cellWidth: 40 },
+      2: { cellWidth: 25, halign: 'right' }, // Sağ hizalı
+      3: { cellWidth: 15, halign: 'center' }, // Ortalı
+      4: { cellWidth: 30, halign: 'right' }, // Sağ hizalı
+    },
+  });
 
-    const customerInfo = orderDetails.customerInfo || {}
-    doc.text(`İsim: ${customerInfo.name || "N/A"}`, 140, 52)
-    doc.text(`E-posta: ${customerInfo.email || "N/A"}`, 140, 59)
+  const finalY = (doc as any).autoTable.previous.finalY; // Tablonun bittiği yer
 
-    if (customerInfo.address) {
-      doc.text(`Adres: ${customerInfo.address}`, 140, 66)
-      doc.text(`${customerInfo.city || ""} ${customerInfo.postalCode || ""}`, 140, 73)
-      doc.text(`${customerInfo.country || ""}`, 140, 80)
-    }
+  // Toplamlar
+  doc.setFontSize(12);
+  doc.text(`Ara Toplam: ${formatCurrency(orderDetails.orderTotal - (orderDetails.orderTotal * 0.18))}`, 150, finalY + 10, { align: 'right' }); // %18 KDV çıkarılarak ara toplam
+  doc.text(`KDV (%18): ${formatCurrency(orderDetails.orderTotal * 0.18)}`, 150, finalY + 17, { align: 'right' });
+  doc.setFontSize(14);
+  doc.text(`Toplam Tutar: ${formatCurrency(orderDetails.orderTotal)}`, 150, finalY + 27, { align: 'right' });
 
-    // Ürün tablosu
-    const tableColumn = ["#", "Kurs", "Eğitmen", "Fiyat"]
-    const tableRows: any[] = []
+  // Ödeme Yöntemi
+  doc.setFontSize(10);
+  doc.text(`Ödeme Yöntemi: ${orderDetails.paymentMethod}`, 10, finalY + 10);
 
-    orderDetails.courses?.forEach((course, index) => {
-      const courseData = [index + 1, course.title, course.instructor, course.price]
-      tableRows.push(courseData)
-    })
+  // Footer
+  doc.setFontSize(8);
+  doc.text("Bu sertifika ARTENPRENEUR tarafından düzenlenmiş ve dijital imza ile güvence altına alınmıştır.", 105, doc.internal.pageSize.height - 10, { align: 'center' });
 
-    // Tablo oluştur
-    doc.autoTable({
-      head: [tableColumn],
-      body: tableRows,
-      startY: 90,
-      theme: "striped",
-      headStyles: { fillColor: [128, 0, 128] },
-      margin: { top: 20 },
-      styles: { overflow: "linebreak" },
-      columnStyles: {
-        0: { cellWidth: 10 },
-        1: { cellWidth: 90 },
-        2: { cellWidth: 50 },
-        3: { cellWidth: 30 },
-      },
-    })
-
-    // Toplam
-    const finalY = doc.lastAutoTable?.finalY || 120
-    doc.setFontSize(12)
-    doc.setFont("helvetica", "bold")
-    doc.text(`Toplam: ${formatPrice(orderDetails.orderTotal || 0)}`, 170, finalY + 15, { align: "right" })
-
-    // QR kod için sipariş bilgilerini hazırla
-    const qrCodeData = JSON.stringify({
-      invoiceNo: orderDetails.orderNumber,
-      date: orderDetails.orderDate || new Date().toLocaleDateString("tr-TR"),
-      total: formatPrice(orderDetails.orderTotal || 0),
-      customer: customerInfo.name,
-      email: customerInfo.email,
-      items: orderDetails.courses?.length || 0,
-      verifyUrl: `https://artenpreneur.com/verify/${orderDetails.orderNumber}`,
-    })
-
-    try {
-      // QR kodu oluştur
-      const qrCodeDataUrl = await generateQRCodeDataURL(qrCodeData)
-
-      // QR kodu PDF'e ekle
-      doc.addImage(qrCodeDataUrl, "PNG", 20, finalY + 25, 40, 40)
-
-      // QR kod açıklaması
-      doc.setFontSize(8)
-      doc.setFont("helvetica", "normal")
-      doc.setTextColor(80, 80, 80)
-      doc.text("Fatura doğrulama için QR kodu tarayın", 40, finalY + 70, { align: "center" })
-    } catch (error) {
-      console.error("QR kod eklenirken hata oluştu:", error)
-      // QR kod eklenemese bile faturayı oluşturmaya devam et
-    }
-
-    // Altbilgi
-    doc.setFontSize(8)
-    doc.setFont("helvetica", "normal")
-    doc.setTextColor(100, 100, 100)
-    doc.text("ARTENPRENEUR - Sanatçılar İçin Girişimcilik Eğitimleri", 105, 280, { align: "center" })
-    doc.text("Bu bir elektronik faturadır.", 105, 285, { align: "center" })
-
-    return doc
-  } catch (error) {
-    console.error("PDF oluşturma hatası:", error)
-    throw error
-  }
-}
+  return doc;
+};

@@ -1,114 +1,162 @@
-// Sepet öğesi tipi
-export type CartItem = {
+// lib/cart.ts
+"use client"
+
+// Types
+export interface AddToCartData {
   id: string
   title: string
-  price: string
-  instructor?: string
+  instructor: string
+  price: number
+  image: string
+  instructorImage?: string
+  originalPrice?: number; // <-- EKLENDİ
+}
+
+export interface CartItem {
+  id: string
+  title: string
+  instructor: string
+  price: number
+  image: string
+  instructorImage?: string
   quantity: number
-  couponCode?: string
-  originalPrice?: string
+  addedAt: string
+  originalPrice?: number; // <-- EKLENDİ
+  couponCode?: string; // <-- EKLENDİ (eğer kupon kodu sepetteki ürüne özgü ise)
 }
 
-// Sepete ürün ekleme
-export const addToCart = (item: CartItem) => {
-  // Mevcut sepeti localStorage'dan al
-  const cartItems = getCartItems()
+// Event emitter for cart updates
+class CartEventEmitter {
+  private listeners: { [key: string]: Function[] } = {}
 
-  // Ürün zaten sepette var mı kontrol et
-  const existingItemIndex = cartItems.findIndex((cartItem) => cartItem.id === item.id)
-
-  if (existingItemIndex !== -1) {
-    // Ürün zaten sepette, miktarını güncelle
-    cartItems[existingItemIndex] = {
-      ...cartItems[existingItemIndex],
-      quantity: cartItems[existingItemIndex].quantity + (item.quantity || 1),
-      price: item.price, // Fiyatı güncelle (indirim uygulanmış olabilir)
-      couponCode: item.couponCode, // Kupon kodunu güncelle
-      originalPrice: item.originalPrice, // Orijinal fiyatı güncelle
+  on(event: string, callback: Function) {
+    if (!this.listeners[event]) {
+      this.listeners[event] = []
     }
-  } else {
-    // Ürün sepette yok, yeni ekle
-    cartItems.push({
-      ...item,
-      quantity: item.quantity || 1,
-    })
+    this.listeners[event].push(callback)
   }
 
-  // Güncellenmiş sepeti localStorage'a kaydet
-  localStorage.setItem("cart", JSON.stringify(cartItems))
-
-  // Sepet güncellendiğinde custom event tetikle
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cartUpdated"))
+  off(event: string, callback: Function) {
+    if (!this.listeners[event]) return
+    this.listeners[event] = this.listeners[event].filter((cb) => cb !== callback)
   }
 
-  return cartItems
+  emit(event: string, data?: any) {
+    if (!this.listeners[event]) return
+    this.listeners[event].forEach((callback) => callback(data))
+  }
 }
 
-// Sepetten ürün çıkarma
-export const removeFromCart = (itemId: string) => {
-  const cartItems = getCartItems()
-  const updatedCart = cartItems.filter((item) => item.id !== itemId)
-  localStorage.setItem("cart", JSON.stringify(updatedCart))
+export const cartEmitter = new CartEventEmitter()
 
-  // Sepet güncellendiğinde custom event tetikle
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cartUpdated"))
-  }
-
-  return updatedCart
-}
-
-// Sepetteki ürün miktarını güncelleme
-export const updateCartItemQuantity = (itemId: string, quantity: number) => {
-  if (quantity < 1) return removeFromCart(itemId)
-
-  const cartItems = getCartItems()
-  const updatedCart = cartItems.map((item) => (item.id === itemId ? { ...item, quantity } : item))
-
-  localStorage.setItem("cart", JSON.stringify(updatedCart))
-
-  // Sepet güncellendiğinde custom event tetikle
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cartUpdated"))
-  }
-
-  return updatedCart
-}
-
-// Sepeti temizleme
-export const clearCart = () => {
-  localStorage.removeItem("cart")
-
-  // Sepet güncellendiğinde custom event tetikle
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new Event("cartUpdated"))
-  }
-
-  return []
-}
-
-// Sepetteki tüm ürünleri getirme
-export const getCartItems = (): CartItem[] => {
+// Get cart items from localStorage
+export function getCartItems(): CartItem[] {
   if (typeof window === "undefined") return []
 
-  const cartData = localStorage.getItem("cart")
-  return cartData ? JSON.parse(cartData) : []
+  try {
+    const cart = localStorage.getItem("cart")
+    return cart ? JSON.parse(cart) : []
+  } catch (error) {
+    console.error("Error getting cart items:", error)
+    return []
+  }
 }
 
-// Sepetteki ürün sayısını getirme
-export const getCartItemCount = (): number => {
-  const cartItems = getCartItems()
-  return cartItems.reduce((total, item) => total + (item.quantity || 1), 0)
+// Save cart items to localStorage
+export function saveCartItems(items: CartItem[]): void {
+  if (typeof window === "undefined") return
+
+  try {
+    localStorage.setItem("cart", JSON.stringify(items))
+    cartEmitter.emit("cartChanged", items)
+  } catch (error) {
+    console.error("Error saving cart items:", error)
+  }
 }
 
-// Sepet toplamını hesaplama
-export const getCartTotal = (): number => {
+// Check if item is in cart
+export function isInCart(id: string): boolean {
   const cartItems = getCartItems()
-  return cartItems.reduce((total, item) => {
-    // Fiyatı sayıya dönüştür (₺90,00 -> 90.00)
-    const price = Number.parseFloat(item.price.replace("₺", "").replace(",", ".")) || 0
-    const quantity = item.quantity || 1
-    return total + price * quantity
-  }, 0)
+  return cartItems.some((item) => item.id === id)
+}
+
+// Add item to cart
+export function addToCart(data: AddToCartData): boolean {
+  try {
+    const cartItems = getCartItems()
+
+    // Check if already in cart
+    const existingItem = cartItems.find((item) => item.id === data.id)
+    if (existingItem) {
+      existingItem.quantity += 1
+    } else {
+      const newCartItem: CartItem = {
+        ...data,
+        quantity: 1,
+        addedAt: new Date().toISOString(),
+        // originalPrice ve couponCode için varsayılan değerler veya kontrol
+        originalPrice: data.originalPrice, // Eğer data'da varsa
+        couponCode: undefined, // Yeni eklendiğinde kupon kodu yok
+      }
+      cartItems.push(newCartItem)
+    }
+
+    saveCartItems(cartItems)
+    return true
+  } catch (error) {
+    console.error("Error adding to cart:", error)
+    return false
+  }
+}
+
+// Remove item from cart (Dönüş tipi CartItem[] olarak değiştirildi)
+export function removeFromCart(id: string): CartItem[] { // <-- Dönüş tipi değiştirildi
+  try {
+    const favorites = getCartItems() // Değişken adı favorites değil cartItems olmalı
+    const updatedItems = favorites.filter((item) => item.id !== id)
+    saveCartItems(updatedItems)
+    return updatedItems // <-- Güncellenmiş diziyi döndür
+  } catch (error) {
+    console.error("Error removing from cart:", error)
+    return getCartItems() // Hata durumunda mevcut sepeti döndür
+  }
+}
+
+// Update item quantity in cart (Dönüş tipi CartItem[] olarak değiştirildi)
+export function updateCartItemQuantity(id: string, newQuantity: number): CartItem[] { // <-- Dönüş tipi değiştirildi
+  try {
+    const cartItems = getCartItems()
+    const item = cartItems.find((item) => item.id === id)
+
+    if (item) {
+      if (newQuantity <= 0) {
+        return removeFromCart(id) // Miktar 0 veya altındaysa kaldır
+      } else {
+        item.quantity = newQuantity
+        saveCartItems(cartItems)
+        return cartItems // <-- Güncellenmiş diziyi döndür
+      }
+    }
+    return cartItems; // Öğeyi bulamazsa mevcut sepeti döndür
+  } catch (error) {
+    console.error("Error updating cart item quantity:", error)
+    return getCartItems() // Hata durumunda mevcut sepeti döndür
+  }
+}
+
+// Get cart count
+export function getCartCount(): number {
+  const cartItems = getCartItems()
+  return cartItems.reduce((total, item) => total + item.quantity, 0)
+}
+
+// Get cart total
+export function getCartTotal(): number {
+  const cartItems = getCartItems()
+  return cartItems.reduce((total, item) => total + item.price * item.quantity, 0)
+}
+
+// Clear cart
+export function clearCart(): void {
+  saveCartItems([])
 }

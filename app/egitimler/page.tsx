@@ -1,208 +1,260 @@
-import Link from "next/link"
-import CourseCard from "@/components/course-card"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Button } from "@/components/ui/button"
+// app/egitimler/page.tsx
+"use client"
 
-// ----------------------------------------------------------------
-//  Dummy data – gerçek projede veritabanından / CMS'den çekebilirsiniz
-// ----------------------------------------------------------------
-export type Course = {
-  id: string
-  title: string
-  instructor: string
-  category: "music" | "visual-arts" | "theater" | "cinema" | "literature"
-  price: number
+import { useState, useMemo } from "react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CourseCard } from "@/components/course-card" // CourseCard import edildi
+import { CourseFilters } from "@/components/course-filters"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
+import { X, Filter } from "lucide-react"
+
+// courseData'yı ve CourseDetailData tipini lib/course-data.ts'den import ediyoruz
+import { courseData as allCoursesObject, CourseDetailData } from "@/lib/course-data"; // <-- courseData'yı allCoursesObject olarak yeniden adlandırdık
+
+// allCoursesObject'i bir diziye dönüştürüyoruz
+const coursesData: CourseDetailData[] = Object.values(allCoursesObject); // <-- Burası değişti!
+
+
+interface FilterState {
+  search: string
+  category: string
+  priceRange: [number, number]
+  level: string
+  sort: string
 }
 
-const courses: Course[] = [
-  {
-    id: "1",
-    title: "Sanatçılar İçin Yazılı İletişim",
-    instructor: "Sanat Deliorman",
-    category: "literature",
-    price: 90,
-  },
-  {
-    id: "2",
-    title: "Kültür Sanat Projeleri İçin Kitlesel Fonlama",
-    instructor: "Dr. Seda Aktaş",
-    category: "visual-arts",
-    price: 90,
-  },
-  {
-    id: "3",
-    title: "Yaratıcı Girişimcilik ve Teknoloji",
-    instructor: "Begüm Meriç",
-    category: "visual-arts",
-    price: 90,
-  },
-  {
-    id: "4",
-    title: "Kültür ve Sanat İçin Kaynak Geliştirme",
-    instructor: "Gizem Gezenoğlu",
-    category: "visual-arts",
-    price: 90,
-  },
-  {
-    id: "5",
-    title: "Bir Tiyatro Kurmak ve Yönetmek",
-    instructor: "Gülhan Kadim",
-    category: "theater",
-    price: 90,
-  },
-  {
-    id: "6",
-    title: "Yaratıcı Endüstriler ve Yaratıcı Ekonomi",
-    instructor: "Doç Dr. Gökçe Dervişoğlu Okandan",
-    category: "literature",
-    price: 80,
-  },
-  {
-    id: "7",
-    title: "Müzik Endüstrisinde Sanatçı ve Proje Yönetimi",
-    instructor: "Fahranaz Bozkurt",
-    category: "music",
-    price: 90,
-  },
-  {
-    id: "8",
-    title: "Müzik Sektöründe Kariyer Planlaması",
-    instructor: "Dr. Funda Lena",
-    category: "music",
-    price: 90,
-  },
-  {
-    id: "9",
-    title: "Film Yapım ve Yönetim Süreçleri",
-    instructor: "Dr. Fırat Sayıcı",
-    category: "cinema",
-    price: 90,
-  },
-  {
-    id: "10",
-    title: "Görsel Sanatlar Alanında Kariyer Gelişimi",
-    instructor: "Saliha Yavuz",
-    category: "visual-arts",
-    price: 90,
-  },
-  {
-    id: "11",
-    title: "Dijital Pazarlama ve Sosyal Medya Stratejileri",
-    instructor: "Ceylan Karaca",
-    category: "literature",
-    price: 90,
-  },
-  {
-    id: "12",
-    title: "İletişim 101: Etkili İletişim Teknikleri",
-    instructor: "Defne Kayacık",
-    category: "literature",
-    price: 90,
-  },
-  {
-    id: "13",
-    title: "Yeni Medya ve Dijital İçerik Üretimi",
-    instructor: "Defne Kayacık",
-    category: "cinema",
-    price: 90,
-  },
-  {
-    id: "14",
-    title: "Ağ ve İşbirlikleri Geliştirme",
-    instructor: "İlkay Bilgiç",
-    category: "literature",
-    price: 90,
-  },
-  {
-    id: "15",
-    title: "NFT ve Metamüzik: Dijital Sanat Ekonomisi",
-    instructor: "Tolga Akyıldız",
-    category: "music",
-    price: 90,
-  },
-  {
-    id: "16",
-    title: "Telif Hakları ve Fikri Mülkiyet",
-    instructor: "Prof Dr. Tekin Memiş",
-    category: "literature",
-    price: 90,
-  },
-]
+const initialFilters: FilterState = {
+  search: "",
+  category: "",
+  priceRange: [0, 300],
+  level: "",
+  sort: "newest",
+}
 
-const categories = [
-  { key: "all", label: "Tüm Programlar" },
-  { key: "music", label: "Müzik" },
-  { key: "visual-arts", label: "Görsel Sanatlar" },
-  { key: "theater", label: "Tiyatro" },
-  { key: "cinema", label: "Sinema" },
-  { key: "literature", label: "Edebiyat" },
-]
-
-// ----------------------------------------------------------------
-//  Page component
-// ----------------------------------------------------------------
 export default function CoursesPage() {
+  const [filters, setFilters] = useState<FilterState>(initialFilters)
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
+
+  // Filter and sort courses
+  const filteredCourses = useMemo(() => {
+    const filtered = coursesData.filter((course) => {
+      // Search filter
+      if (filters.search) {
+        const searchTerm = filters.search.toLowerCase()
+        const matchesTitle = course.title.toLowerCase().includes(searchTerm)
+        const matchesInstructor = course.instructorName.toLowerCase().includes(searchTerm) // instructorName kullanıldı
+        if (!matchesTitle && !matchesInstructor) return false
+      }
+
+      // Category filter
+      if (filters.category && course.category.toLowerCase() !== filters.category.toLowerCase()) return false // Kategori filtrelemesi küçük harfe duyarlı yapıldı
+
+      // Price range filter
+      if (course.price < filters.priceRange[0] || course.price > filters.priceRange[1]) return false
+
+      // Level filter
+      if (filters.level && course.level.toLowerCase() !== filters.level.toLowerCase()) return false // Seviye filtrelemesi küçük harfe duyarlı yapıldı
+
+      return true
+    })
+
+    // Sort courses
+    switch (filters.sort) {
+      case "newest":
+        filtered.sort((a, b) => { /* Varsayılan sıralama ya da eklendiği tarihe göre */ return 0; }); // Burada gerçek bir 'newest' mantığı eklemelisiniz, şu anki ID'ye göre sıralama string ID'ler için doğru çalışmayabilir.
+        break;
+      case "oldest":
+        filtered.sort((a, b) => { /* Varsayılan sıralama ya da eklendiği tarihe göre */ return 0; });
+        break;
+      case "price-low":
+        filtered.sort((a, b) => a.price - b.price);
+        break;
+      case "price-high":
+        filtered.sort((a, b) => b.price - a.price);
+        break;
+      case "popular":
+        filtered.sort((a, b) => b.studentCount - a.studentCount);
+        break;
+      case "rating":
+        filtered.sort((a, b) => b.rating - a.rating);
+        break;
+      default:
+        break;
+    }
+
+    return filtered
+  }, [filters])
+
+  const handleFiltersChange = (newFilters: Partial<FilterState>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters }))
+  }
+
+  const clearAllFilters = () => {
+    setFilters(initialFilters)
+  }
+
+  const getActiveFiltersCount = () => {
+    let count = 0
+    if (filters.search) count++
+    if (filters.category) count++
+    if (filters.priceRange[0] > 0 || filters.priceRange[1] < 300) count++
+    if (filters.level) count++
+    return count
+  }
+
+  const activeFiltersCount = getActiveFiltersCount()
+
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* ---------------- Hero ---------------- */}
-      <section className="bg-primary py-16 text-primary-foreground">
-        <div className="container-custom">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-6">Eğitim Programları</h1>
-            <p className="text-lg md:text-xl mb-8">
-              Sanatçıların işlerini daha sürdürülebilir kılabilmesi için ihtiyaç duydukları tüm bilgi ve becerileri
-              kazandıran eğitim programlarımızı keşfedin.
-            </p>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white border-b">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold mb-2">Tüm Eğitimler</h1>
+              <p className="text-gray-600">
+                {filteredCourses.length} kurs bulundu{" "}
+                {coursesData.length !== filteredCourses.length && `(${coursesData.length} toplam)`}
+              </p>
+            </div>
+
+            {/* Mobile Filter Toggle */}
+            <Button
+              variant="outline"
+              className="md:hidden bg-transparent"
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filtreler
+              {activeFiltersCount > 0 && (
+                <Badge variant="secondary" className="ml-2">
+                  {activeFiltersCount}
+                </Badge>
+              )}
+            </Button>
           </div>
         </div>
-      </section>
+      </div>
 
-      {/* ---------------- Course Tabs ---------------- */}
-      <section className="py-16">
-        <div className="container-custom">
-          <Tabs defaultValue="all" className="w-full">
-            <TabsList className="flex flex-wrap justify-center gap-1 mb-12">
-              {categories.map((c) => (
-                <TabsTrigger key={c.key} value={c.key} className="px-4 py-2 text-base">
-                  {c.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-
-            {categories.map(({ key }) => (
-              <TabsContent key={key} value={key} className="mt-0">
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                  {courses
-                    .filter((c) => key === "all" || c.category === key)
-                    .map((c) => (
-                      <CourseCard
-                        key={c.id}
-                        id={c.id}
-                        title={c.title}
-                        instructor={c.instructor}
-                        price={`₺${c.price.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`}
-                      />
-                    ))}
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex flex-col lg:flex-row gap-8">
+          {/* Filters Sidebar */}
+          <div className={`lg:w-80 ${showMobileFilters ? "block" : "hidden lg:block"}`}>
+            <div className="sticky top-8">
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-semibold">Filtreler</h2>
+                  {activeFiltersCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={clearAllFilters}>
+                      Temizle
+                    </Button>
+                  )}
                 </div>
-              </TabsContent>
-            ))}
-          </Tabs>
-        </div>
-      </section>
 
-      {/* ---------------- CTA ---------------- */}
-      <section className="py-16 bg-primary-light">
-        <div className="container-custom text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6">Özel Eğitim mi Arıyorsunuz?</h2>
-          <p className="text-lg mb-8 max-w-3xl mx-auto">
-            Kurumunuz veya grubunuz için özel eğitim programları düzenliyoruz. İhtiyaçlarınıza uygun çözümler için
-            bizimle iletişime geçin.
-          </p>
-          <Link href="/iletisim">
-            <Button size="lg">Bizimle İletişime Geçin</Button>
-          </Link>
+                <CourseFilters
+                  filters={filters}
+                  onFiltersChange={handleFiltersChange}
+                  totalCourses={coursesData.length}
+                  filteredCount={filteredCourses.length}
+                />
+              </Card>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1">
+            {/* Active Filters */}
+            {activeFiltersCount > 0 && (
+              <div className="mb-6">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-medium text-gray-700">Aktif Filtreler:</span>
+
+                  {filters.search && (
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                      Arama: {filters.search}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 ml-1"
+                        onClick={() => handleFiltersChange({ search: "" })}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+
+                  {filters.category && (
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                      {filters.category}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 ml-1"
+                        onClick={() => handleFiltersChange({ category: "" })}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+
+                  {filters.level && (
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                      {filters.level}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 ml-1"
+                        onClick={() => handleFiltersChange({ level: "" })}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+
+                  {(filters.priceRange[0] > 0 || filters.priceRange[1] < 300) && (
+                    <Badge variant="secondary" className="flex items-center gap-1">
+                      ₺{filters.priceRange[0]} - ₺{filters.priceRange[1]}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-auto p-0 ml-1"
+                        onClick={() => handleFiltersChange({ priceRange: [0, 300] })}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Results */}
+            {filteredCourses.length > 0 ? (
+              <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {filteredCourses.map((course) => (
+                  <CourseCard key={course.id} course={course} />
+                ))}
+              </div>
+            ) : (
+              <Card className="p-12 text-center">
+                <CardContent>
+                  <div className="text-gray-500 mb-4">
+                    <Filter className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <h3 className="text-lg font-medium mb-2">Kurs bulunamadı</h3>
+                    <p>Arama kriterlerinize uygun kurs bulunmuyor.</p>
+                  </div>
+                  <Button variant="outline" onClick={clearAllFilters}>
+                    Filtreleri Temizle
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </div>
-      </section>
+      </div>
     </div>
   )
 }

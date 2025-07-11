@@ -1,79 +1,93 @@
-// prisma/schema.prisma
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
 
 datasource db {
-  provider = "postgresql" // veya kullandığınız veritabanı türü (mysql, sqlite, vs.)
-  url      = env("DATABASE_URL")
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")  // Eğer shadow DB kullanıyorsanız
+  schemas           = ["public", "auth"]
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
+// Model tanımlarınız
 
-// --- Buradan sonrası sizin modelleriniz ---
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String    @unique
-  password      String
-  role          Role      @default(USER)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  subscriptions Subscription[]
-  videoProgress VideoProgress[]
+  id           String      @id @default(uuid())     // UUID primary key
+  name         String?
+  email        String?     @unique
+  image        String?
+
+  certificates Certificate[]  // Kullanıcının sertifikaları
+  enrollments  Enrollment[]   // Kullanıcının kayıtlı olduğu kurslar
+
+  @@map("users") // Veritabanı tablosunun adı
 }
 
 model Course {
-  id            String          @id @default(cuid())
-  title         String
-  description   String
-  price         Float
-  videos        Video[]
-  subscriptions Subscription[]  // <-- Bunu ekleyin!
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id                 String      @id @default(uuid())
+  title              String
+  instructor         String
+  duration           Int?
+
+  fullVideoR2Key     String?
+  previewVideoR2Key  String?
+
+  subtitle           String?
+  category           String?
+  price              Float?
+  originalPrice      Float?
+  level              String?
+  rating             Float?
+  reviewCount        Int?
+  studentCount       Int?
+  lessonCount        Int?
+  language           String?
+  lastUpdated        DateTime?
+  completionRate     Int?
+  isBestseller       Boolean?
+  hasLifetimeAccess  Boolean?
+  hasCertificate     Boolean?
+  description        String?
+  longDescription    String?
+  coursePreviewImage String?
+  slug               String?
+  offerEndsAt        DateTime?
+
+  certificates       Certificate[]
+  enrollments        Enrollment[]
+
+  @@map("courses")
 }
 
-model Video {
-  id          String    @id @default(cuid())
-  title       String
-  description String
-  url         String    // Video URL (AWS S3 veya başka bir CDN)
-  courseId    String
-  course      Course    @relation(fields: [courseId], references: [id])
-  progress    VideoProgress[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+model Enrollment {
+  id         String    @id @default(uuid())
+  userId     String
+  courseId   String
+  enrolledAt DateTime  @default(now())
+
+  user       User      @relation(fields: [userId], references: [id])
+  course     Course    @relation(fields: [courseId], references: [id])
+
+  @@unique([userId, courseId])
+  @@map("enrollments")
 }
 
-model Subscription {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  courseId  String
-  course    Course   @relation(fields: [courseId], references: [id])
-  startDate DateTime @default(now())
-  endDate   DateTime
-  status    SubscriptionStatus @default(ACTIVE)
-}
+model Certificate {
+  id                String    @id @default(uuid())
+  certificateNumber String    @unique
+  verificationCode  String    @unique
+  grade             Int?
+  completedAt       DateTime
+  createdAt         DateTime  @default(now())
+  status            String    @default("ACTIVE")
 
-model VideoProgress {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  videoId   String
-  video     Video    @relation(fields: [videoId], references: [id])
-  progress  Float    @default(0) // 0-100 arası izleme yüzdesi
-  completed Boolean  @default(false)
-  lastPosition Float @default(0) // Video izleme pozisyonu (saniye)
-}
+  userId            String
+  courseId          String
+  issuedAt          DateTime  @default(now())
 
-enum Role {
-  USER
-  ADMIN
-}
+  user              User      @relation(fields: [userId], references: [id])
+  course            Course    @relation(fields: [courseId], references: [id])
 
-enum SubscriptionStatus {
-  ACTIVE
-  EXPIRED
-  CANCELLED
+  @@map("certificates")
 }

@@ -1,3 +1,4 @@
+// app/hesabim/siparislerim/page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -11,14 +12,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { formatPrice } from "@/lib/coupons"
+import { formatPrice } from "@/lib/coupons" // formatPrice burada import edilmiş
 import { generateInvoicePDF } from "@/lib/invoice-generator"
 import { toast } from "sonner"
 import { Eye, Search, Calendar, ArrowUpDown, Download } from "lucide-react"
 import { format } from "date-fns"
 import { tr } from "date-fns/locale"
 
-// Sipariş tipi
+// Sipariş tipi - Fiyat tipleri DÜZELTİLDİ
 type Order = {
   id: string
   orderNumber: string
@@ -30,8 +31,8 @@ type Order = {
     id: string
     title: string
     instructor: string
-    price: string
-    originalPrice?: string
+    price: number // <-- String yerine Number
+    originalPrice?: number // <-- String yerine Number
     image?: string
   }>
   customerInfo?: {
@@ -54,50 +55,68 @@ export default function OrdersPage() {
   const [sortBy, setSortBy] = useState("date-desc")
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false)
 
+  // Fiyatı string'den number'a dönüştüren yardımcı fonksiyon
+  const parsePriceToNumber = (priceString: string | number): number => {
+      if (typeof priceString === 'number') {
+          return priceString;
+      }
+      // "₺1234,56" -> "1234.56" -> 1234.56
+      return Number.parseFloat(priceString.replace("₺", "").replace(",", ".")) || 0;
+  };
+
   // Siparişleri yükle
   useEffect(() => {
     const loadOrders = () => {
       setIsLoading(true)
 
       try {
-        // localStorage'dan siparişleri al
         const storedOrders = localStorage.getItem("orders")
         const lastOrder = localStorage.getItem("lastOrder")
 
         let ordersArray: Order[] = []
 
-        // Kayıtlı siparişler varsa ekle
         if (storedOrders) {
-          ordersArray = JSON.parse(storedOrders)
+          // localStorage'dan gelen string fiyatları number'a dönüştürerek parse et
+          const parsedStoredOrders: any[] = JSON.parse(storedOrders);
+          ordersArray = parsedStoredOrders.map(order => ({
+              ...order,
+              total: parsePriceToNumber(order.total), // Eğer total de string olarak kaydedilmişse
+              courses: order.courses.map((course: any) => ({
+                  ...course,
+                  price: parsePriceToNumber(course.price),
+                  originalPrice: course.originalPrice ? parsePriceToNumber(course.originalPrice) : undefined
+              }))
+          }));
         }
 
-        // Son sipariş varsa ve listede yoksa ekle
         if (lastOrder) {
-          const parsedLastOrder = JSON.parse(lastOrder)
+          const parsedLastOrder: any = JSON.parse(lastOrder)
 
-          // Sipariş numarasına göre kontrol et
           if (!ordersArray.some((order) => order.orderNumber === parsedLastOrder.orderNumber)) {
-            // Yeni sipariş oluştur
+            // Son siparişin kurslarındaki fiyatları da number'a dönüştür
+            const coursesWithNumberPrices = parsedLastOrder.courses.map((course: any) => ({
+                ...course,
+                price: parsePriceToNumber(course.price),
+                originalPrice: course.originalPrice ? parsePriceToNumber(course.originalPrice) : undefined
+            }));
+
             const newOrder: Order = {
               id: crypto.randomUUID(),
               orderNumber: parsedLastOrder.orderNumber,
               orderDate: parsedLastOrder.orderDate || new Date().toISOString(),
               paymentMethod: parsedLastOrder.paymentMethod || "Kredi Kartı",
               status: "completed",
-              total: parsedLastOrder.orderTotal || 0,
-              courses: parsedLastOrder.courses || [],
+              total: parsePriceToNumber(parsedLastOrder.orderTotal || 0), // total'ı da dönüştür
+              courses: coursesWithNumberPrices || [],
               customerInfo: parsedLastOrder.customerInfo || {},
             }
 
-            // Siparişler listesine ekle
             ordersArray = [newOrder, ...ordersArray]
 
-            // Güncellenmiş listeyi localStorage'a kaydet
             localStorage.setItem("orders", JSON.stringify(ordersArray))
           }
         }
 
-        // Örnek sipariş yoksa demo siparişler ekle
         if (ordersArray.length === 0) {
           ordersArray = generateDemoOrders()
           localStorage.setItem("orders", JSON.stringify(ordersArray))
@@ -120,12 +139,10 @@ export default function OrdersPage() {
   useEffect(() => {
     let result = [...orders]
 
-    // Durum filtreleme
     if (statusFilter !== "all") {
       result = result.filter((order) => order.status === statusFilter)
     }
 
-    // Arama filtreleme
     if (searchTerm) {
       const lowerSearchTerm = searchTerm.toLowerCase()
       result = result.filter(
@@ -139,7 +156,6 @@ export default function OrdersPage() {
       )
     }
 
-    // Sıralama
     switch (sortBy) {
       case "date-desc":
         result.sort((a, b) => new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime())
@@ -158,13 +174,11 @@ export default function OrdersPage() {
     setFilteredOrders(result)
   }, [orders, searchTerm, statusFilter, sortBy])
 
-  // Fatura oluştur ve indir
   const downloadInvoice = async (order: Order) => {
     try {
       setIsGeneratingPdf(true)
       toast.loading("Fatura oluşturuluyor...")
 
-      // PDF oluştur
       const doc = await generateInvoicePDF({
         orderNumber: order.orderNumber,
         orderDate: order.orderDate,
@@ -174,7 +188,6 @@ export default function OrdersPage() {
         customerInfo: order.customerInfo,
       })
 
-      // PDF'i indir
       doc.save(`ARTENPRENEUR-Fatura-${order.orderNumber}.pdf`)
 
       toast.dismiss()
@@ -188,12 +201,10 @@ export default function OrdersPage() {
     }
   }
 
-  // Sipariş detaylarını görüntüle
   const viewOrderDetails = (orderId: string) => {
     router.push(`/hesabim/siparislerim/${orderId}`)
   }
 
-  // Durum badge'i
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
@@ -207,91 +218,36 @@ export default function OrdersPage() {
     }
   }
 
-  // Tarih formatla
   const formatDate = (dateString: string) => {
     try {
-      return format(new Date(dateString), "d MMMM yyyy", { locale: tr })
+      return format(new Date(dateString), "d MMMM yyyy", { locale: tr }) // Yıl ekledim
     } catch (e) {
       return dateString
     }
   }
 
-  // Demo siparişler oluştur
+  // Demo siparişler oluştur - Fiyatlar sayı olarak düzeltildi
   function generateDemoOrders(): Order[] {
     return [
       {
-        id: "order-1",
-        orderNumber: "SP-2023-001",
-        orderDate: "2023-11-15T14:30:00Z",
-        paymentMethod: "Kredi Kartı",
-        status: "completed",
-        total: 1299,
+        id: "order-1", orderNumber: "SP-2023-001", orderDate: "2023-11-15T14:30:00Z", paymentMethod: "Kredi Kartı", status: "completed", total: 1299,
         courses: [
-          {
-            id: "course-1",
-            title: "Dijital Sanat Temelleri",
-            instructor: "Ayşe Yılmaz",
-            price: "₺799",
-            originalPrice: "₺999",
-          },
-          {
-            id: "course-2",
-            title: "Sanat Pazarlama Stratejileri",
-            instructor: "Mehmet Demir",
-            price: "₺500",
-          },
-        ],
-        customerInfo: {
-          name: "Kullanıcı Adı",
-          email: "kullanici@ornek.com",
-        },
+          { id: "course-1", title: "Dijital Sanat Temelleri", instructor: "Ayşe Yılmaz", price: 799, originalPrice: 999, image: "/images/courses/dijital-sanat-temelleri.jpg" },
+          { id: "course-2", title: "Sanat Pazarlama Stratejileri", instructor: "Mehmet Demir", price: 500, image: "/images/courses/sanat-pazarlama-stratejileri.jpg" },
+        ], customerInfo: { name: "Kullanıcı Adı", email: "kullanici@ornek.com", },
       },
       {
-        id: "order-2",
-        orderNumber: "SP-2023-002",
-        orderDate: "2023-12-05T09:15:00Z",
-        paymentMethod: "Havale/EFT",
-        status: "completed",
-        total: 1499,
+        id: "order-2", orderNumber: "SP-2023-002", orderDate: "2023-12-05T09:15:00Z", paymentMethod: "Havale/EFT", status: "completed", total: 1499,
         courses: [
-          {
-            id: "course-3",
-            title: "Sanatçılar için İş Planı Hazırlama",
-            instructor: "Zeynep Kaya",
-            price: "₺1499",
-            originalPrice: "₺1999",
-          },
-        ],
-        customerInfo: {
-          name: "Kullanıcı Adı",
-          email: "kullanici@ornek.com",
-        },
+          { id: "course-3", title: "Sanatçılar için İş Planı Hazırlama", instructor: "Zeynep Kaya", price: 1499, originalPrice: 1999, image: "/images/courses/is-plani-hazirlama.jpg" },
+        ], customerInfo: { name: "Kullanıcı Adı", email: "kullanici@ornek.com", },
       },
       {
-        id: "order-3",
-        orderNumber: "SP-2024-001",
-        orderDate: "2024-01-20T16:45:00Z",
-        paymentMethod: "Kredi Kartı",
-        status: "processing",
-        total: 2499,
+        id: "order-3", orderNumber: "SP-2024-001", orderDate: "2024-01-20T16:45:00Z", paymentMethod: "Kredi Kartı", status: "processing", total: 2499,
         courses: [
-          {
-            id: "course-4",
-            title: "Sanat Galerisi Yönetimi",
-            instructor: "Ali Yıldız",
-            price: "₺1299",
-          },
-          {
-            id: "course-5",
-            title: "Sanatçılar için Sosyal Medya",
-            instructor: "Selin Ak",
-            price: "₺1200",
-          },
-        ],
-        customerInfo: {
-          name: "Kullanıcı Adı",
-          email: "kullanici@ornek.com",
-        },
+          { id: "course-4", title: "Sanat Galerisi Yönetimi", instructor: "Ali Yıldız", price: 1299, image: "/images/courses/sanat-galerisi-yonetimi.jpg" },
+          { id: "course-5", title: "Sanatçılar için Sosyal Medya", instructor: "Selin Ak", price: 1200, image: "/images/courses/sosyal-medya-sanatcilar.jpg" },
+        ], customerInfo: { name: "Kullanıcı Adı", email: "kullanici@ornek.com", },
       },
     ]
   }

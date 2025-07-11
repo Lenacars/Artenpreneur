@@ -1,48 +1,45 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
-import { createMiddlewareClient } from "@supabase/auth-helpers-nextjs"
+import { getToken } from "next-auth/jwt"
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next()
-
-  // Önizleme modunda middleware kontrolünü atla
-  const isPreviewMode =
-    process.env.NODE_ENV === "development" ||
-    req.headers.get("host")?.includes("localhost") ||
-    req.headers.get("host")?.includes("vercel.app")
-
-  if (isPreviewMode) {
-    return res
-  }
+  // NEXTAUTH_SECRET'ı environment variable'dan al
+  const secret = process.env.NEXTAUTH_SECRET || "fallback-secret-for-development-only"
 
   try {
-    const supabase = createMiddlewareClient({ req, res })
+    const token = await getToken({ req, secret })
 
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
+    console.log("Middleware - Path:", req.nextUrl.pathname, "Token:", !!token)
 
-    // Kullanıcı oturum açmamışsa login sayfasına yönlendir
-    if (!session && req.nextUrl.pathname.startsWith("/admin")) {
-      return NextResponse.redirect(new URL("/login", req.url))
-    }
-
-    // Kullanıcı oturum açmış ama admin değilse ana sayfaya yönlendir
-    if (session && req.nextUrl.pathname.startsWith("/admin")) {
-      // Admin kullanıcısı olup olmadığını kontrol et
-      const { data, error } = await supabase.from("admin_users").select().eq("id", session.user.id).single()
-
-      if (error || !data) {
-        return NextResponse.redirect(new URL("/", req.url))
+    // Admin sayfaları için kontrol
+    if (req.nextUrl.pathname.startsWith("/admin")) {
+      if (!token) {
+        console.log("Admin sayfası - token yok, login'e yönlendiriliyor")
+        return NextResponse.redirect(new URL("/giris", req.url))
       }
     }
-  } catch (error) {
-    console.error("Middleware hatası:", error)
-  }
 
-  return res
+    // Hesabım sayfaları için kontrol
+    if (req.nextUrl.pathname.startsWith("/hesabim")) {
+      if (!token) {
+        console.log("Hesabım sayfası - token yok, giriş'e yönlendiriliyor")
+        return NextResponse.redirect(new URL("/giris?callbackUrl=" + encodeURIComponent(req.url), req.url))
+      }
+    }
+
+    // Giriş yapmış kullanıcıları giriş/kayıt sayfalarından yönlendir
+    if (token && (req.nextUrl.pathname === "/giris" || req.nextUrl.pathname === "/kayit")) {
+      console.log("Token var, hesabım'a yönlendiriliyor")
+      return NextResponse.redirect(new URL("/hesabim", req.url))
+    }
+
+    return NextResponse.next()
+  } catch (error) {
+    console.error("Middleware error:", error)
+    return NextResponse.next()
+  }
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/login"],
+  matcher: ["/admin/:path*", "/hesabim/:path*", "/giris", "/kayit"],
 }

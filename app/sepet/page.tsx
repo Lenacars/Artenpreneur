@@ -8,9 +8,9 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Trash2, Tag, AlertCircle } from "lucide-react"
-import { getCartItems, updateCartItemQuantity, removeFromCart, clearCart, type CartItem } from "@/lib/cart"
+import { getCartItems, updateCartItemQuantity, removeFromCart, clearCart, type CartItem, cartEmitter } from "@/lib/cart" // cartEmitter eklendi
 import { validateCoupon, calculateDiscount, parsePrice, formatPrice, type Coupon } from "@/lib/coupons"
-import { getInstructorImage } from "@/lib/getInstructorImage"
+import { getInstructorImage } from "@/lib/course-data" // getInstructorImage'ın lib/course-data'dan geldiğini varsayıyorum
 import { toast } from "sonner"
 import Link from "next/link"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -39,6 +39,16 @@ export default function CartPage() {
         localStorage.removeItem("appliedCoupon")
       }
     }
+
+    // Sepet değişikliklerini dinle
+    const handleCartChanged = () => {
+      setCartItems(getCartItems());
+    };
+    cartEmitter.on("cartChanged", handleCartChanged);
+    return () => {
+      cartEmitter.off("cartChanged", handleCartChanged);
+    };
+
   }, [])
 
   // Miktar güncelleme
@@ -104,13 +114,14 @@ export default function CartPage() {
   // Fiyat hesaplamaları
   const calculateSubtotal = () => {
     return cartItems.reduce((total, item) => {
-      const price = parsePrice(item.price)
+      // item.price zaten bir number olduğu için parsePrice çağırmaya gerek yok
+      const price = item.price // <-- Düzeltme burada!
       return total + price * item.quantity
     }, 0)
   }
 
   const calculateTax = (subtotal: number) => {
-    return subtotal * 0.18 // %18 KDV
+    return subtotal * 0.2 // %20 KDV
   }
 
   const calculateDiscountAmount = (subtotal: number) => {
@@ -182,10 +193,11 @@ export default function CartPage() {
                 <div key={item.id} className="flex flex-col md:flex-row gap-4 py-4 border-b last:border-0">
                   <div className="relative w-full md:w-32 h-24 bg-gray-100 rounded overflow-hidden flex-shrink-0">
                     <Image
-                      src={getInstructorImage(item.instructor || "") || "/placeholder.svg"}
+                      src={item.image || "/placeholder.svg"}
                       alt={item.title}
                       fill
                       className="object-cover"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                     />
                   </div>
                   <div className="flex-1">
@@ -198,8 +210,8 @@ export default function CartPage() {
                         <div className="mt-1">
                           {item.originalPrice && item.originalPrice !== item.price ? (
                             <div className="flex items-center gap-2">
-                              <span className="text-gray-500 line-through text-sm">{item.originalPrice}</span>
-                              <span className="font-medium">{item.price}</span>
+                              <span className="text-gray-500 line-through text-sm">{formatPrice(item.originalPrice)}</span>
+                              <span className="font-medium">{formatPrice(item.price)}</span>
                               {item.couponCode && (
                                 <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
                                   {item.couponCode}
@@ -207,7 +219,7 @@ export default function CartPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="font-medium">{item.price}</span>
+                            <span className="font-medium">{formatPrice(item.price)}</span>
                           )}
                         </div>
                       </div>
@@ -311,7 +323,7 @@ export default function CartPage() {
                     <span>{formatPrice(subtotal)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>KDV (%18)</span>
+                    <span>KDV (%20)</span>
                     <span>{formatPrice(tax)}</span>
                   </div>
 

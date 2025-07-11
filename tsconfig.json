@@ -8,7 +8,7 @@
     "allowJs": true,
     "target": "ES6",
     "skipLibCheck": true,
-    "strict": true,
+    "strict": true, // Bu 'any' hatalarını tetikler, iyi bir pratik
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -21,9 +21,15 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "#/lib/*": [ 
+        "./lib/*" 
+      ],
+      "#/components/*": [ 
+        "./components/*" 
       ]
     },
-    "plugins": [
+    "plugins": [  
       {
         "name": "next"
       }

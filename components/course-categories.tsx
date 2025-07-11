@@ -1,3 +1,4 @@
+// components/course-categories.tsx
 "use client"
 
 import { useState } from "react"
@@ -6,102 +7,23 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import CourseCard from "@/components/course-card"
 
-// Örnek veri - gerçek uygulamada API'den gelecek
-const courses = [
-  {
-    id: "yazili-iletisim",
-    title: "Sanatçılar İçin Yazılı İletişim",
-    instructor: "Sanat Deliorman",
-    price: "₺90,00",
-    category: "edebiyat",
-  },
-  {
-    id: "kitlesel-fonlama",
-    title: "Kültür Sanat Projeleri İçin Kitlesel Fonlama",
-    instructor: "Dr. Seda Aktaş",
-    price: "₺90,00",
-    category: "genel",
-  },
-  {
-    id: "yaratici-girisimcilik",
-    title: "Yaratıcı Girişimcilik ve Teknoloji",
-    instructor: "Begüm Meriç",
-    price: "₺90,00",
-    category: "genel",
-  },
-  {
-    id: "kaynak-gelistirme",
-    title: "Kültür ve Sanat İçin Kaynak Geliştirme",
-    instructor: "Gizem Gezenoğlu",
-    price: "₺90,00",
-    category: "genel",
-  },
-  {
-    id: "tiyatro-kurmak",
-    title: "Bir Tiyatro Kurmak ve Yönetmek",
-    instructor: "Gülhan Kadim",
-    price: "₺90,00",
-    category: "tiyatro",
-  },
-  {
-    id: "yaratici-ekonomi",
-    title: "Yaratıcı Endüstriler ve Yaratıcı Ekonomi",
-    instructor: "Doç Dr. Gökçe Dervişoğlu Okandan",
-    price: "₺90,00",
-    category: "genel",
-  },
-  {
-    id: "gorsel-sanatlar",
-    title: "Görsel Sanatlar Alanında Kariyer Gelişimi",
-    instructor: "Saliha Yavuz",
-    price: "₺90,00",
-    category: "gorsel-sanatlar",
-  },
-  {
-    id: "film-yapim",
-    title: "Film Yapım ve Yönetim Süreçleri",
-    instructor: "Dr. Fırat Sayıcı",
-    price: "₺90,00",
-    category: "sinema",
-  },
-  {
-    id: "muzik-sektoru",
-    title: "Müzik Sektöründe Kariyer Gelişimi",
-    instructor: "Dr. Funda Lena",
-    price: "₺90,00",
-    category: "muzik",
-  },
-  {
-    id: "telif-haklari",
-    title: "Sanatçılar İçin Telif Hakları",
-    instructor: "Prof. Dr. Tekin Memiş",
-    price: "₺90,00",
-    category: "genel",
-  },
-  {
-    id: "nft-metamuzik",
-    title: "NFT ve Metamüzik",
-    instructor: "Tolga Akyıldız",
-    price: "₺90,00",
-    category: "muzik",
-  },
-  {
-    id: "muzik-endustrisi",
-    title: "Müzik Endüstrisi ve Dijital Platformlar",
-    instructor: "Fahranaz Bozkurt",
-    price: "₺90,00",
-    category: "muzik",
-  },
-]
+// courseData'yı ve CourseDetailData tipini lib/course-data.ts'den import ediyoruz
+import { courseData, CourseDetailData } from "@/lib/course-data"; // <-- Yeni import
 
 export default function CourseCategories() {
   const [activeTab, setActiveTab] = useState("all")
 
+  // lib/course-data.ts'deki courseData objesinden tüm kursları bir diziye dönüştürüyoruz.
+  // Bu kurslar zaten CourseDetailData tipine uygun.
+  const allCourses: CourseDetailData[] = Object.values(courseData);
+
   // Filtreleme fonksiyonu
-  const filteredCourses = activeTab === "all" ? courses : courses.filter((course) => course.category === activeTab)
+  const filteredCourses = activeTab === "all"
+    ? allCourses
+    : allCourses.filter((course) => course.category.toLowerCase() === activeTab.toLowerCase()); // Kategori filtrelemesi küçük harfe duyarlı yapıldı
 
   // Sadece ilk 6 kursu göster
-  const displayedCourses = filteredCourses.slice(0, 6)
+  const displayedCourses = filteredCourses.slice(0, 6); // İlk 6 kursu gösterme mantığı korundu
 
   return (
     <div className="flex flex-col items-center">
@@ -150,10 +72,7 @@ export default function CourseCategories() {
             {displayedCourses.map((course) => (
               <CourseCard
                 key={course.id}
-                id={course.id}
-                title={course.title}
-                instructor={course.instructor}
-                price={course.price}
+                course={course} // CourseCard artık CourseDetailData bekliyor ve bu yüzden sorunsuz çalışacak
               />
             ))}
           </div>
