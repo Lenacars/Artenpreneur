@@ -4,34 +4,50 @@ generator client {
 }
 
 datasource db {
-  provider          = "postgresql"
-  url               = env("DATABASE_URL")
-  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")  // Eğer shadow DB kullanıyorsanız
-  schemas           = ["public", "auth"]
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["public"] // sadece kendi şeman!
 }
 
 // Model tanımlarınız
 
 model User {
-  id           String      @id @default(uuid())     // UUID primary key
-  name         String?
-  email        String?     @unique
-  image        String?
+  id       String  @id @default(uuid()) // UUID primary key
+  name     String?
+  email    String? @unique
+  password String
+  role     String
+  image    String?
 
-  certificates Certificate[]  // Kullanıcının sertifikaları
-  enrollments  Enrollment[]   // Kullanıcının kayıtlı olduğu kurslar
+  certificates Certificate[] // Kullanıcının sertifikaları
+  enrollments  Enrollment[] // Kullanıcının kayıtlı olduğu kurslar
 
-  @@map("users") // Veritabanı tablosunun adı
+  userRoles UserRole[] // <-- İLİŞKİ: bir kullanıcıya birden fazla rol
+
+  @@map("users")
+  @@schema("public")
+}
+
+model UserRole {
+  id     String @id @default(uuid())
+  userId String
+  role   String
+
+  user User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@schema("public")
 }
 
 model Course {
-  id                 String      @id @default(uuid())
-  title              String
-  instructor         String
-  duration           Int?
+  id         String @id @default(uuid())
+  title      String
+  instructor String
+  duration   Int?
 
-  fullVideoR2Key     String?
-  previewVideoR2Key  String?
+  fullVideoR2Key    String?
+  previewVideoR2Key String?
 
   subtitle           String?
   category           String?
@@ -54,40 +70,43 @@ model Course {
   slug               String?
   offerEndsAt        DateTime?
 
-  certificates       Certificate[]
-  enrollments        Enrollment[]
+  certificates Certificate[]
+  enrollments  Enrollment[]
 
   @@map("courses")
+  @@schema("public")
 }
 
 model Enrollment {
-  id         String    @id @default(uuid())
+  id         String   @id @default(uuid())
   userId     String
   courseId   String
-  enrolledAt DateTime  @default(now())
+  enrolledAt DateTime @default(now())
 
-  user       User      @relation(fields: [userId], references: [id])
-  course     Course    @relation(fields: [courseId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  course Course @relation(fields: [courseId], references: [id])
 
   @@unique([userId, courseId])
   @@map("enrollments")
+  @@schema("public")
 }
 
 model Certificate {
-  id                String    @id @default(uuid())
-  certificateNumber String    @unique
-  verificationCode  String    @unique
+  id                String   @id @default(uuid())
+  certificateNumber String   @unique
+  verificationCode  String   @unique
   grade             Int?
   completedAt       DateTime
-  createdAt         DateTime  @default(now())
-  status            String    @default("ACTIVE")
+  createdAt         DateTime @default(now())
+  status            String   @default("ACTIVE")
 
-  userId            String
-  courseId          String
-  issuedAt          DateTime  @default(now())
+  userId   String
+  courseId String
+  issuedAt DateTime @default(now())
 
-  user              User      @relation(fields: [userId], references: [id])
-  course            Course    @relation(fields: [courseId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+  course Course @relation(fields: [courseId], references: [id])
 
   @@map("certificates")
+  @@schema("public")
 }

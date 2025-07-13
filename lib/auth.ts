@@ -1,21 +1,5 @@
 import type { NextAuthOptions } from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { createClient } from "@supabase/supabase-js"
-
-// Supabase client for authentication
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-let supabase: any = null
-
-if (supabaseUrl && supabaseServiceKey) {
-  supabase = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
-}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -30,61 +14,33 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Email ve şifre gerekli")
         }
 
-        if (!supabase) {
-          console.error("Supabase client not initialized")
-          throw new Error("Veritabanı bağlantısı kurulamadı")
-        }
-
+        // Burada kendi backend API'na fetch ile istek atıyoruz:
         try {
-          // Sign in with Supabase
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email: credentials.email,
-            password: credentials.password,
+          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
           })
 
-          if (error) {
-            console.error("Supabase auth error:", error)
-            throw new Error("Giriş başarısız")
+          if (!res.ok) {
+            const errorData = await res.json()
+            throw new Error(errorData.message || "Giriş başarısız.")
           }
 
-          if (!data.user) {
-            throw new Error("Kullanıcı bulunamadı")
+          // Beklenen format:
+          // { id: string, email: string, name: string, image?: string, role: string }
+          const user = await res.json()
+
+          // Kullanıcı dönerse:
+          if (user && user.id) {
+            return user
           }
-
-          console.log("Returning user:", data.user)
-
-          // Get user profile from Supabase users table
-          const { data: profile, error: profileError } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", data.user.id)
-            .single()
-
-          if (profileError && profileError.code !== "PGRST116") {
-            console.error("Profile fetch error:", profileError)
-          }
-
-          // Get user role from user_roles table
-          const { data: roleData, error: roleError } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", data.user.id)
-            .single()
-
-          if (roleError && roleError.code !== "PGRST116") {
-            console.error("Role fetch error:", roleError)
-          }
-
-          return {
-            id: data.user.id,
-            email: data.user.email!,
-            name: profile?.full_name || data.user.email!.split("@")[0],
-            image: profile?.avatar_url || null,
-            role: roleData?.role || "user",
-          }
+          return null
         } catch (error) {
-          console.error("Auth error:", error)
-          throw error
+          throw new Error("Giriş sırasında hata oluştu.")
         }
       },
     }),
@@ -95,29 +51,26 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async jwt({ token, user }) {
+      // İlk login'de user gelir, sonraki refreshlerde sadece token olur
       if (user) {
+        token.id = user.id
         token.role = user.role
+        token.email = user.email
+        token.name = user.name
+        token.image = user.image
       }
-
-      // Fetch updated user role on each token refresh
-      if (token.sub && supabase) {
-        try {
-          const { data: roleData } = await supabase.from("user_roles").select("role").eq("user_id", token.sub).single()
-
-          if (roleData) {
-            token.role = roleData.role
-          }
-        } catch (error) {
-          console.error("Error fetching user role:", error)
-        }
-      }
-
       return token
     },
     async session({ session, token }) {
+      // Session'a kullanıcı bilgilerini ekle
       if (token) {
-        session.user.id = token.sub!
-        session.user.role = token.role as string
+        session.user = {
+          id: token.id as string,
+          email: token.email as string,
+          name: token.name as string,
+          image: token.image as string | undefined,
+          role: token.role as string,
+        }
       }
       return session
     },

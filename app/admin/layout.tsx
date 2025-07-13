@@ -1,17 +1,11 @@
-"use client"
-
-import type React from "react"
+'use client'
 
 import { useState, useEffect } from "react"
 import { usePathname } from "next/navigation"
 import Link from "next/link"
-import { createClient } from "@supabase/supabase-js"
 import { Home, Users, BookOpen, ShoppingCart, Settings, LogOut, Menu, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
-
-// Supabase bilgilerinizi buraya ekleyin
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+import { parseJwt } from "@/utils/jwt"
 
 export default function AdminLayout({
   children,
@@ -22,25 +16,20 @@ export default function AdminLayout({
   const [user, setUser] = useState<any>(null)
   const pathname = usePathname()
 
-  // Supabase istemcisini oluştur
-  const supabase = createClient(supabaseUrl, supabaseKey)
-
   useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (session) {
-        setUser(session.user)
-      }
+    // Giriş yapan kullanıcıyı localStorage’daki JWT'den oku
+    const token = localStorage.getItem("token")
+    if (token) {
+      const payload = parseJwt(token)
+      setUser(payload)
+    } else {
+      setUser(null)
     }
-
-    getUser()
   }, [])
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    window.location.href = "/login"
+  const handleSignOut = () => {
+    localStorage.removeItem("token")
+    window.location.href = "/giris"
   }
 
   const navItems = [
@@ -50,6 +39,13 @@ export default function AdminLayout({
     { name: "Siparişler", href: "/admin/siparisler", icon: ShoppingCart },
     { name: "Ayarlar", href: "/admin/ayarlar", icon: Settings },
   ]
+
+  // Eğer user yoksa ve admin routes’ta ise girişe yönlendir (güvenlik için)
+  useEffect(() => {
+    if (!user && typeof window !== "undefined" && pathname.startsWith("/admin")) {
+      window.location.href = "/giris"
+    }
+  }, [user, pathname])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -67,7 +63,9 @@ export default function AdminLayout({
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r transform ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 transition-transform duration-300 ease-in-out`}
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r transform ${
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        } lg:translate-x-0 transition-transform duration-300 ease-in-out`}
       >
         <div className="flex flex-col h-full">
           <div className="p-4 border-b">
@@ -100,7 +98,8 @@ export default function AdminLayout({
             {user && (
               <div className="mb-4 px-3 py-2">
                 <p className="text-sm text-gray-500">Giriş yapan:</p>
-                <p className="text-sm font-medium truncate">{user.email}</p>
+                <p className="text-sm font-medium truncate">{user.email || user.username}</p>
+                {/* Kullanıcı objesinde email veya username varsa göster */}
               </div>
             )}
             <Button variant="outline" className="w-full justify-start" onClick={handleSignOut}>

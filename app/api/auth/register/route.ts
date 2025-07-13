@@ -1,8 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 import bcrypt from "bcryptjs"
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+import { prisma } from "@/lib/prisma" // Prisma Client'ı doğru import et
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +11,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Email kontrolü
-    const { data: existingUser } = await supabase.from("users").select("id").eq("email", email).single()
+    const existingUser = await prisma.User.findUnique({
+      where: { email },
+      select: { id: true },
+    })
 
     if (existingUser) {
       return NextResponse.json({ error: "Bu email adresi zaten kullanılıyor" }, { status: 400 })
@@ -22,57 +23,29 @@ export async function POST(request: NextRequest) {
     // Şifreyi hash'le
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Supabase Auth ile kullanıcı oluştur
-    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: {
-        name,
-      },
-    })
-
-    if (authError) {
-      console.error("Supabase auth error:", authError)
-      return NextResponse.json({ error: "Kullanıcı oluşturulamadı" }, { status: 500 })
-    }
-
-    // Users tablosuna kullanıcı bilgilerini ekle
-    const { data: user, error: userError } = await supabase
-      .from("users")
-      .insert({
-        id: authUser.user.id,
+    // Kullanıcıyı oluştur
+    const user = await prisma.User.create({
+      data: {
         name,
         email,
         password: hashedPassword,
-        role: "USER",
-      })
-      .select()
-      .single()
-
-    if (userError) {
-      console.error("User insert error:", userError)
-      return NextResponse.json({ error: "Kullanıcı profili oluşturulamadı" }, { status: 500 })
-    }
-
-    // User roles tablosuna rol ekle
-    const { error: roleError } = await supabase.from("user_roles").insert({
-      user_id: authUser.user.id,
-      role: "USER",
+        role: "USER", // veya default rol neyse
+      },
+      select: { id: true, name: true, email: true },
     })
 
-    if (roleError) {
-      console.error("Role insert error:", roleError)
-    }
+    // Rol tablosuna ekle (isteğe bağlı)
+    await prisma.UserRole.create({
+      data: {
+        userId: user.id,
+        role: "USER",
+      },
+    })
 
     return NextResponse.json(
       {
         message: "Kullanıcı başarıyla oluşturuldu",
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-        },
+        user,
       },
       { status: 201 },
     )
