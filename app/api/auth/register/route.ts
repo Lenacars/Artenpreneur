@@ -1,6 +1,8 @@
+// app/api/auth/register/route.ts
+
 import { type NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma"; // Kendi Prisma client dosyan
+import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Email kontrolü
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await prisma.User.findUnique({
       where: { email },
       select: { id: true },
     });
@@ -24,18 +26,18 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // Kullanıcıyı oluştur
-    const user = await prisma.user.create({
+    const user = await prisma.User.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        role: "USER", // veya default rol neyse
+        role: "USER",
       },
       select: { id: true, name: true, email: true },
     });
 
     // Rol tablosuna ekle (isteğe bağlı)
-    await prisma.userRole.create({
+    await prisma.UserRole.create({
       data: {
         userId: user.id,
         role: "USER",
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
         message: "Kullanıcı başarıyla oluşturuldu",
         user,
       },
-      { status: 201 },
+      { status: 201 }
     );
   } catch (error) {
     console.error("Registration error:", error);

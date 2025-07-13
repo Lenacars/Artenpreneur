@@ -1,8 +1,9 @@
+// lib/prisma.ts
 import { PrismaClient } from '@prisma/client';
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
-export const prisma =
+export const prisma = // Buradaki 'export const prisma' ifadesi çok önemli.
   globalForPrisma.prisma ||
   new PrismaClient();
 
