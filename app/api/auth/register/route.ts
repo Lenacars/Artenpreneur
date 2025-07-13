@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Email kontrolü
-    const existingUser = await prisma.User.findUnique({
+    const existingUser = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
     });
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // Kullanıcıyı oluştur
-    const user = await prisma.User.create({
+    const user = await prisma.user.create({
       data: {
         name,
         email,
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Rol tablosuna ekle (isteğe bağlı)
-    await prisma.UserRole.create({
+    await prisma.userRole.create({
       data: {
         userId: user.id,
         role: "USER",
