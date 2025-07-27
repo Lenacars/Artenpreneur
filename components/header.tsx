@@ -16,15 +16,31 @@ const Header = () => {
   const [scrolled, setScrolled] = useState(false)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false)
   const [cartItems, setCartItems] = useState<any[]>([])
+  const [isVisible, setIsVisible] = useState(true)
+  const [lastScrollY, setLastScrollY] = useState(0)
 
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 20)
+      const currentScrollY = window.scrollY
+      
+      // Check if scrolled past threshold for background change
+      setScrolled(currentScrollY > 20)
+      
+      // Determine scroll direction and handle header visibility
+      if (currentScrollY > lastScrollY && currentScrollY > 100) {
+        // Scrolling down and past 100px - hide header
+        setIsVisible(false)
+      } else if (currentScrollY < lastScrollY) {
+        // Scrolling up - show header
+        setIsVisible(true)
+      }
+      
+      setLastScrollY(currentScrollY)
     }
 
-    window.addEventListener("scroll", handleScroll)
+    window.addEventListener("scroll", handleScroll, { passive: true })
     return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
+  }, [lastScrollY])
 
   useEffect(() => {
     // Client tarafında localStorage'dan sepet öğelerini al
@@ -49,8 +65,10 @@ const Header = () => {
 
   return (
     <header
-      className={`sticky top-0 z-50 w-full transition-all duration-300 ${
+      className={`fixed top-0 z-50 w-full transition-all duration-300 ease-in-out ${
         scrolled ? "bg-white shadow-md py-2" : "bg-white/95 py-3"
+      } ${
+        isVisible ? "translate-y-0" : "-translate-y-full"
       }`}
     >
       {/* İletişim ve Sosyal Medya Çubuğu */}
