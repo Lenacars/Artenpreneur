@@ -1,0 +1,1 @@
+* product card hover vidie preview
